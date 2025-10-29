@@ -3,11 +3,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <body style="font:16px system-ui; padding:20px; max-width:720px; margin:auto;">
 <h2>Add Ethereum Mainnet</h2>
-<p>If you don’t see a prompt, tap a wallet button or press Connect.</p>
+<p>If you don’t see a prompt, tap <b>Connect</b> then <b>Add/Switch Network</b>. If you’re <i>not</i> inside a wallet, use one of the open-in-wallet buttons.</p>
 
 <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
-  <button id="mm" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
-  <button id="tw" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
+  <button id="openMM" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
+  <button id="openTW" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
+  <button id="copyTW" style="padding:12px 16px; border-radius:10px;">Copy Trust deeplink</button>
   <button id="connect" style="padding:12px 16px; border-radius:10px;">Connect</button>
   <button id="add" style="padding:12px 16px; border-radius:10px;">Add/Switch Network</button>
 </div>
@@ -28,16 +29,54 @@
   const statusEl = document.getElementById('status');
   const log = (m) => { statusEl.textContent = m; };
 
-  // --- Deep links for mobile ---
-  const dappUrl = encodeURIComponent(window.location.href);
-  document.getElementById('mm').onclick = () => {
-    window.location.href = `https://link.metamask.io/dapp/${dappUrl}`;
+  // --- Environment detection helpers ---
+  const isTrustContext = () => {
+    return !!(window.trustwallet?.ethereum) ||
+           !!(window.ethereum && (window.ethereum.isTrust || window.ethereum.isTrustWallet));
   };
-  document.getElementById('tw').onclick = () => {
-    window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${dappUrl}`;
+  const isMetaMaskContext = () => {
+    const eth = window.ethereum;
+    if (!eth) return false;
+    const list = eth.providers || [eth];
+    return !!list.find(p => p && p.isMetaMask);
   };
 
-  // --- EIP-6963 provider discovery (multi-wallet) ---
+  // --- Mobile deep links (HTTPS only) ---
+  const PAGE_URL = window.location.href;
+  const ENC = encodeURIComponent(PAGE_URL);
+  const MM_LINK = `https://link.metamask.io/dapp/${ENC}`;
+  const TW_LINK = `https://link.trustwallet.com/open_url?coin_id=60&url=${ENC}`;
+
+  document.getElementById('openMM').onclick = () => {
+    // Only deep-link if we're NOT already in MetaMask’s browser
+    if (isMetaMaskContext()) {
+      log('Already in MetaMask browser. Use Connect → Add/Switch.');
+    } else {
+      window.location.href = MM_LINK;
+    }
+  };
+
+  document.getElementById('openTW').onclick = () => {
+    // Only deep-link if we're NOT already in Trust’s browser
+    if (isTrustContext()) {
+      log('Already in Trust Wallet browser. Use Connect → Add/Switch.');
+    } else {
+      // Use HTTPS link (NOT trust://). If Android’s webview blocks navigation,
+      // use the Copy button and paste this link in Chrome/Safari.
+      window.location.href = TW_LINK;
+    }
+  };
+
+  document.getElementById('copyTW').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(TW_LINK);
+      log('📋 Trust deeplink copied. Open it from Chrome/Safari (outside the wallet) to launch Trust Wallet.');
+    } catch {
+      log('Copy failed. Long-press to select & copy:\n' + TW_LINK);
+    }
+  };
+
+  // --- EIP-6963 discovery (multi-wallet) ---
   let discoveredProviders = [];
   window.addEventListener('eip6963:announceProvider', (event) => {
     const provider = event.detail?.provider;
@@ -45,12 +84,11 @@
   });
   window.dispatchEvent(new Event('eip6963:requestProvider'));
 
-  // --- Helper: pick best provider (Trust first) ---
   function pickProvider() {
-    // 1) Trust Wallet explicit injection point (mobile)
+    // 1) Trust Wallet explicit
     if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
 
-    // 2) EIP-6963 announced providers
+    // 2) EIP-6963 announced
     const byFlag = (p) => p && (p.isTrustWallet || p.isTrust || p.isMetaMask);
     if (discoveredProviders.length) {
       return discoveredProviders.find(p => p.isTrustWallet || p.isTrust)
@@ -69,21 +107,21 @@
 
   async function connect(provider) {
     try {
-      // Try the modern request flow
       await provider.request({ method: 'eth_requestAccounts' });
       log('✅ Connected to wallet.');
     } catch (e1) {
-      // Legacy fallback (some old Trust builds)
-      try {
-        if (typeof provider.enable === 'function') {
+      // Legacy enable fallback
+      if (typeof provider.enable === 'function') {
+        try {
           await provider.enable();
           log('✅ Connected (legacy enable).');
-        } else {
-          throw e1;
+        } catch (e2) {
+          log('⚠️ Connect failed: ' + (e2?.message || e2));
+          throw e2;
         }
-      } catch (e2) {
-        log('⚠️ Connect failed: ' + (e2?.message || e2));
-        throw e2;
+      } else {
+        log('⚠️ Connect failed: ' + (e1?.message || e1));
+        throw e1;
       }
     }
   }
@@ -92,9 +130,8 @@
     try {
       await provider.request({ method: 'wallet_addEthereumChain', params });
     } catch (e) {
-      // Already added? proceed to switch
       const msg = String(e?.message || e);
-      if (!/already|exist/i.test(msg)) throw e;
+      if (!/already|exist/i.test(msg)) throw e; // only ignore "already added"
     }
     await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
     log('✅ Ethereum Mainnet added & switched.');
@@ -102,13 +139,13 @@
 
   document.getElementById('connect').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Use the MetaMask/Trust buttons above.');
+    if (!provider) return log('No wallet detected. If on mobile, use a button above to open this page inside your wallet.');
     await connect(provider);
   };
 
   document.getElementById('add').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Use the MetaMask/Trust buttons above.');
+    if (!provider) return log('No wallet detected. If on mobile, use a button above to open this page inside your wallet.');
     try {
       await connect(provider).catch(()=>{});
       await addAndSwitch(provider);
@@ -117,18 +154,14 @@
     }
   };
 
-  // --- Wait for wallet initialization events (Trust/MM) ---
-  function onReadyToDetect() {
-    attemptAuto();
-  }
-  window.addEventListener('ethereum#initialized', onReadyToDetect, { once: true });
-  window.addEventListener('trustwallet#initialized', onReadyToDetect, { once: true });
+  // --- Wait for wallet init events, then auto-attempt with retries ---
+  function onReadyToDetect(){ attemptAuto(); }
+  window.addEventListener('ethereum#initialized', onReadyToDetect, { once:true });
+  window.addEventListener('trustwallet#initialized', onReadyToDetect, { once:true });
 
-  // --- Auto attempt with retries (handles slow injection) ---
   async function attemptAuto() {
     log('Looking for a wallet provider…');
-    const start = Date.now();
-    const timeoutMs = 5000;
+    const start = Date.now(), timeoutMs = 6000;
     while (Date.now() - start < timeoutMs) {
       const p = pickProvider();
       if (p) {
@@ -141,12 +174,11 @@
         }
         return;
       }
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 250));
     }
-    log('No wallet detected. Use the MetaMask/Trust buttons above to open this page inside your wallet, then tap Connect.');
+    log('No wallet detected. If you’re in Chrome/Safari, use the buttons to open this page inside MetaMask/Trust. If you’re already in Trust, tap Connect → Add/Switch.');
   }
 
-  // Kick off once DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', attemptAuto);
   } else {
