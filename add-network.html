@@ -15,7 +15,7 @@
 <pre id="status" style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:10px; margin-top:8px;"></pre>
 
 <script>
-  // ====== Ethereum Mainnet ======
+  // ====== Ethereum Mainnet params ======
   const params = [{
     chainId: '0x1',
     chainName: 'Ethereum Mainnet',
@@ -23,11 +23,12 @@
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://etherscan.io']
   }];
-  // ==============================
+  // =====================================
 
   const statusEl = document.getElementById('status');
   const log = (m) => { statusEl.textContent = m; };
 
+  // --- Deep links for mobile ---
   const dappUrl = encodeURIComponent(window.location.href);
   document.getElementById('mm').onclick = () => {
     window.location.href = `https://link.metamask.io/dapp/${dappUrl}`;
@@ -36,7 +37,7 @@
     window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${dappUrl}`;
   };
 
-  // --- EIP-6963 provider discovery ---
+  // --- Provider discovery (EIP-6963 + fallbacks) ---
   let discoveredProviders = [];
   window.addEventListener('eip6963:announceProvider', (event) => {
     const provider = event.detail?.provider;
@@ -47,11 +48,16 @@
   window.dispatchEvent(new Event('eip6963:requestProvider'));
 
   function pickProvider() {
-    // Prefer explicitly-identified MM/TW
+    // Trust Wallet explicit fallback
+    if (window.trustwallet && window.trustwallet.ethereum) {
+      return window.trustwallet.ethereum;
+    }
+    // EIP-6963 announced providers
     const byFlag = (p) => p && (p.isMetaMask || p.isTrust || p.isTrustWallet);
     if (discoveredProviders.length) {
       return discoveredProviders.find(byFlag) || discoveredProviders[0];
     }
+    // Classic window.ethereum
     const eth = window.ethereum;
     if (!eth) return null;
     const list = eth.providers || [eth];
@@ -72,7 +78,7 @@
     try {
       await provider.request({ method: 'wallet_addEthereumChain', params });
     } catch (e) {
-      // If already added, many wallets throw; proceed to switch
+      // If already added, proceed to switch
       if (!/already|exist/i.test(String(e?.message || e))) throw e;
     }
     await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
@@ -81,15 +87,14 @@
 
   document.getElementById('connect').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
+    if (!provider) return log('No wallet detected. Use the MetaMask/Trust buttons above.');
     await connect(provider);
   };
 
   document.getElementById('add').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
+    if (!provider) return log('No wallet detected. Use the MetaMask/Trust buttons above.');
     try {
-      // connect first on some wallets to allow add/switch
       await connect(provider).catch(()=>{});
       await addAndSwitch(provider);
     } catch (e) {
@@ -97,10 +102,10 @@
     }
   };
 
-  // --- Auto attempt after short wait (for slow injections/mobile) ---
+  // --- Auto attempt after short wait ---
   (async () => {
     log('Looking for a wallet provider…');
-    for (let i = 0; i < 10; i++) { // wait up to ~2 seconds
+    for (let i = 0; i < 10; i++) { // wait up to ~2s
       const p = pickProvider();
       if (p) {
         log('Wallet detected. Attempting add/switch…');
