@@ -3,12 +3,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <body style="font:16px system-ui; padding:20px; max-width:720px; margin:auto;">
 <h2>Add Ethereum Mainnet</h2>
-<p>If you don’t see a prompt, tap <b>Connect</b> then <b>Add/Switch Network</b>. If you’re <i>not</i> inside a wallet, use one of the open-in-wallet buttons.</p>
+<p>If you don’t see a prompt, tap a wallet button or press Connect.</p>
 
 <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
-  <button id="openMM" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
-  <button id="openTW" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
-  <button id="copyTW" style="padding:12px 16px; border-radius:10px;">Copy Trust deeplink</button>
+  <button id="mm" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
+  <button id="tw" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
   <button id="connect" style="padding:12px 16px; border-radius:10px;">Connect</button>
   <button id="add" style="padding:12px 16px; border-radius:10px;">Add/Switch Network</button>
 </div>
@@ -16,113 +15,56 @@
 <pre id="status" style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:10px; margin-top:8px;"></pre>
 
 <script>
-  // ====== Ethereum Mainnet params ======
+  // ====== Ethereum Mainnet ======
   const params = [{
     chainId: '0x1',
     chainName: 'Ethereum Mainnet',
-    rpcUrls: ['https://rpc.ankr.com/eth'], // replace with your preferred HTTPS RPC
+    rpcUrls: ['https://virtual.mainnet.eu.rpc.tenderly.co/37feb082-9f44-4181-995b-c07680be2661'],  // <-- replace with your preferred RPC
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://etherscan.io']
   }];
-  // =====================================
+  // ==============================
 
   const statusEl = document.getElementById('status');
   const log = (m) => { statusEl.textContent = m; };
 
-  // --- Environment detection helpers ---
-  const isTrustContext = () => {
-    return !!(window.trustwallet?.ethereum) ||
-           !!(window.ethereum && (window.ethereum.isTrust || window.ethereum.isTrustWallet));
+  const dappUrl = encodeURIComponent(window.location.href);
+  document.getElementById('mm').onclick = () => {
+    window.location.href = `https://link.metamask.io/dapp/${dappUrl}`;
   };
-  const isMetaMaskContext = () => {
-    const eth = window.ethereum;
-    if (!eth) return false;
-    const list = eth.providers || [eth];
-    return !!list.find(p => p && p.isMetaMask);
+  document.getElementById('tw').onclick = () => {
+    window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${dappUrl}`;
   };
 
-  // --- Mobile deep links (HTTPS only) ---
-  const PAGE_URL = window.location.href;
-  const ENC = encodeURIComponent(PAGE_URL);
-  const MM_LINK = `https://link.metamask.io/dapp/${ENC}`;
-  const TW_LINK = `https://link.trustwallet.com/open_url?coin_id=60&url=${ENC}`;
-
-  document.getElementById('openMM').onclick = () => {
-    // Only deep-link if we're NOT already in MetaMask’s browser
-    if (isMetaMaskContext()) {
-      log('Already in MetaMask browser. Use Connect → Add/Switch.');
-    } else {
-      window.location.href = MM_LINK;
-    }
-  };
-
-  document.getElementById('openTW').onclick = () => {
-    // Only deep-link if we're NOT already in Trust’s browser
-    if (isTrustContext()) {
-      log('Already in Trust Wallet browser. Use Connect → Add/Switch.');
-    } else {
-      // Use HTTPS link (NOT trust://). If Android’s webview blocks navigation,
-      // use the Copy button and paste this link in Chrome/Safari.
-      window.location.href = TW_LINK;
-    }
-  };
-
-  document.getElementById('copyTW').onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(TW_LINK);
-      log('📋 Trust deeplink copied. Open it from Chrome/Safari (outside the wallet) to launch Trust Wallet.');
-    } catch {
-      log('Copy failed. Long-press to select & copy:\n' + TW_LINK);
-    }
-  };
-
-  // --- EIP-6963 discovery (multi-wallet) ---
+  // --- EIP-6963 provider discovery ---
   let discoveredProviders = [];
   window.addEventListener('eip6963:announceProvider', (event) => {
     const provider = event.detail?.provider;
-    if (provider && !discoveredProviders.includes(provider)) discoveredProviders.push(provider);
+    if (provider && !discoveredProviders.includes(provider)) {
+      discoveredProviders.push(provider);
+    }
   });
   window.dispatchEvent(new Event('eip6963:requestProvider'));
 
   function pickProvider() {
-    // 1) Trust Wallet explicit
-    if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
-
-    // 2) EIP-6963 announced
-    const byFlag = (p) => p && (p.isTrustWallet || p.isTrust || p.isMetaMask);
+    // Prefer explicitly-identified MM/TW
+    const byFlag = (p) => p && (p.isMetaMask || p.isTrust || p.isTrustWallet);
     if (discoveredProviders.length) {
-      return discoveredProviders.find(p => p.isTrustWallet || p.isTrust)
-          || discoveredProviders.find(p => p.isMetaMask)
-          || discoveredProviders[0];
+      return discoveredProviders.find(byFlag) || discoveredProviders[0];
     }
-
-    // 3) Classic window.ethereum (+ multi-provider)
     const eth = window.ethereum;
     if (!eth) return null;
     const list = eth.providers || [eth];
-    return list.find(p => p && (p.isTrustWallet || p.isTrust))
-        || list.find(p => p && p.isMetaMask)
-        || list[0];
+    return list.find(byFlag) || list[0];
   }
 
   async function connect(provider) {
     try {
       await provider.request({ method: 'eth_requestAccounts' });
       log('✅ Connected to wallet.');
-    } catch (e1) {
-      // Legacy enable fallback
-      if (typeof provider.enable === 'function') {
-        try {
-          await provider.enable();
-          log('✅ Connected (legacy enable).');
-        } catch (e2) {
-          log('⚠️ Connect failed: ' + (e2?.message || e2));
-          throw e2;
-        }
-      } else {
-        log('⚠️ Connect failed: ' + (e1?.message || e1));
-        throw e1;
-      }
+    } catch (e) {
+      log('⚠️ Connect failed: ' + (e?.message || e));
+      throw e;
     }
   }
 
@@ -130,8 +72,8 @@
     try {
       await provider.request({ method: 'wallet_addEthereumChain', params });
     } catch (e) {
-      const msg = String(e?.message || e);
-      if (!/already|exist/i.test(msg)) throw e; // only ignore "already added"
+      // If already added, many wallets throw; proceed to switch
+      if (!/already|exist/i.test(String(e?.message || e))) throw e;
     }
     await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
     log('✅ Ethereum Mainnet added & switched.');
@@ -139,14 +81,15 @@
 
   document.getElementById('connect').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. If on mobile, use a button above to open this page inside your wallet.');
+    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
     await connect(provider);
   };
 
   document.getElementById('add').onclick = async () => {
     const provider = pickProvider();
-    if (!provider) return log('No wallet detected. If on mobile, use a button above to open this page inside your wallet.');
+    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
     try {
+      // connect first on some wallets to allow add/switch
       await connect(provider).catch(()=>{});
       await addAndSwitch(provider);
     } catch (e) {
@@ -154,15 +97,10 @@
     }
   };
 
-  // --- Wait for wallet init events, then auto-attempt with retries ---
-  function onReadyToDetect(){ attemptAuto(); }
-  window.addEventListener('ethereum#initialized', onReadyToDetect, { once:true });
-  window.addEventListener('trustwallet#initialized', onReadyToDetect, { once:true });
-
-  async function attemptAuto() {
+  // --- Auto attempt after short wait (for slow injections/mobile) ---
+  (async () => {
     log('Looking for a wallet provider…');
-    const start = Date.now(), timeoutMs = 6000;
-    while (Date.now() - start < timeoutMs) {
+    for (let i = 0; i < 10; i++) { // wait up to ~2 seconds
       const p = pickProvider();
       if (p) {
         log('Wallet detected. Attempting add/switch…');
@@ -174,16 +112,10 @@
         }
         return;
       }
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 200));
     }
-    log('No wallet detected. If you’re in Chrome/Safari, use the buttons to open this page inside MetaMask/Trust. If you’re already in Trust, tap Connect → Add/Switch.');
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', attemptAuto);
-  } else {
-    attemptAuto();
-  }
+    log('No wallet detected. Use the MetaMask/Trust buttons above to open this page inside your wallet.');
+  })();
 </script>
 </body>
 </html>
