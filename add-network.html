@@ -3,30 +3,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <body style="font:16px system-ui; padding:20px; max-width:720px; margin:auto;">
 <h2>Add Ethereum Mainnet</h2>
-<p>If you don’t see a prompt, tap a wallet button or press Connect.</p>
+<p>Tap a button below if this page doesn’t auto-prompt.</p>
 
-<div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
-  <button id="mm" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
-  <button id="tw" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
-  <button id="connect" style="padding:12px 16px; border-radius:10px;">Connect</button>
-  <button id="add" style="padding:12px 16px; border-radius:10px;">Add/Switch Network</button>
-</div>
+<button id="mm" style="padding:12px 16px; border-radius:10px; margin-right:8px;">
+Open in MetaMask (mobile)
+</button>
+<button id="tw" style="padding:12px 16px; border-radius:10px;">
+Open in Trust Wallet (mobile)
+</button>
 
-<pre id="status" style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:10px; margin-top:8px;"></pre>
+<pre id="status" style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:10px; margin-top:16px;"></pre>
 
 <script>
   // ====== Ethereum Mainnet ======
   const params = [{
     chainId: '0x1',
     chainName: 'Ethereum Mainnet',
-    rpcUrls: ['https://rpc.ankr.com/eth'], // replace if you have your own HTTPS RPC
+    rpcUrls: ['https://rpc.ankr.com/eth'],  // <-- replace with your preferred RPC
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://etherscan.io']
   }];
   // ==============================
-
-  const statusEl = document.getElementById('status');
-  const log = (m) => { statusEl.textContent = m; };
 
   const dappUrl = encodeURIComponent(window.location.href);
   document.getElementById('mm').onclick = () => {
@@ -36,85 +33,25 @@
     window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${dappUrl}`;
   };
 
-  // --- EIP-6963 provider discovery ---
-  let discoveredProviders = [];
-  window.addEventListener('eip6963:announceProvider', (event) => {
-    const provider = event.detail?.provider;
-    if (provider && !discoveredProviders.includes(provider)) {
-      discoveredProviders.push(provider);
-    }
-  });
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  const log = (m)=>{ document.getElementById('status').textContent = m; };
 
-  function pickProvider() {
-    // Prefer explicitly-identified MM/TW
-    const byFlag = (p) => p && (p.isMetaMask || p.isTrust || p.isTrustWallet);
-    if (discoveredProviders.length) {
-      return discoveredProviders.find(byFlag) || discoveredProviders[0];
-    }
+  const pickProvider = () => {
     const eth = window.ethereum;
     if (!eth) return null;
     const list = eth.providers || [eth];
-    return list.find(byFlag) || list[0];
-  }
+    return list.find(p => (p && (p.isMetaMask || p.isTrust || p.isTrustWallet))) || list[0];
+  };
 
-  async function connect(provider) {
-    try {
-      await provider.request({ method: 'eth_requestAccounts' });
-      log('✅ Connected to wallet.');
-    } catch (e) {
-      log('⚠️ Connect failed: ' + (e?.message || e));
-      throw e;
-    }
-  }
-
-  async function addAndSwitch(provider) {
+  (async () => {
+    const provider = pickProvider();
+    if (!provider) { log('No wallet detected. Use the buttons above.'); return; }
     try {
       await provider.request({ method: 'wallet_addEthereumChain', params });
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
+      log('✅ Ethereum Mainnet added & switched.');
     } catch (e) {
-      // If already added, many wallets throw; proceed to switch
-      if (!/already|exist/i.test(String(e?.message || e))) throw e;
+      log('⚠️ ' + (e && e.message ? e.message : e));
     }
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
-    log('✅ Ethereum Mainnet added & switched.');
-  }
-
-  document.getElementById('connect').onclick = async () => {
-    const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
-    await connect(provider);
-  };
-
-  document.getElementById('add').onclick = async () => {
-    const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
-    try {
-      // connect first on some wallets to allow add/switch
-      await connect(provider).catch(()=>{});
-      await addAndSwitch(provider);
-    } catch (e) {
-      log('⚠️ ' + (e?.message || e));
-    }
-  };
-
-  // --- Auto attempt after short wait (for slow injections/mobile) ---
-  (async () => {
-    log('Looking for a wallet provider…');
-    for (let i = 0; i < 10; i++) { // wait up to ~2 seconds
-      const p = pickProvider();
-      if (p) {
-        log('Wallet detected. Attempting add/switch…');
-        try {
-          await connect(p).catch(()=>{});
-          await addAndSwitch(p);
-        } catch (e) {
-          log('⚠️ ' + (e?.message || e));
-        }
-        return;
-      }
-      await new Promise(r => setTimeout(r, 200));
-    }
-    log('No wallet detected. Use the MetaMask/Trust buttons above to open this page inside your wallet.');
   })();
 </script>
 </body>
