@@ -1,121 +1,219 @@
 <!doctype html>
 <html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<body style="font:16px system-ui; padding:20px; max-width:720px; margin:auto;">
-<h2>Add Ethereum Mainnet</h2>
-<p>If you don’t see a prompt, tap a wallet button or press Connect.</p>
+<body style="font:16px system-ui; padding:20px; max-width:820px; margin:auto;">
+<h2 class="title">Add Ethereum Mainnet</h2>
+<p>Choose your device type below. If no prompt appears, tap <b>Connect</b> then <b>Add/Switch Network</b>.</p>
 
-<div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
-  <button id="mm" style="padding:12px 16px; border-radius:10px;">Open in MetaMask (mobile)</button>
-  <button id="tw" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet (mobile)</button>
-  <button id="connect" style="padding:12px 16px; border-radius:10px;">Connect</button>
-  <button id="add" style="padding:12px 16px; border-radius:10px;">Add/Switch Network</button>
+<!-- Device tabs -->
+<div id="tabs" style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 8px;">
+  <button data-tab="android"  style="padding:8px 12px; border-radius:10px;">Android</button>
+  <button data-tab="ios"      style="padding:8px 12px; border-radius:10px;">iOS</button>
+  <button data-tab="desktop"  style="padding:8px 12px; border-radius:10px;">Browser Extensions</button>
+</div>
+
+<!-- ANDROID -->
+<div id="panel-android" class="panel">
+  <h3>Android</h3>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
+    <button id="openMM-android" style="padding:12px 16px; border-radius:10px;">Open in MetaMask</button>
+    <button id="openTW-android" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet</button>
+    <button id="copyTW-android" style="padding:12px 16px; border-radius:10px;">Copy Trust deeplink</button>
+    <!-- Exodus -->
+    <button id="copyURL-android" style="padding:12px 16px; border-radius:10px;">Copy page URL for Exodus</button>
+  </div>
+  <ol style="margin:0 0 12px 18px;">
+    <li><b>MetaMask/Trust</b>: buttons above open this page inside the wallet browser and auto-prompt.</li>
+    <li><b>Exodus</b>: open <i>Exodus → Profile → Web3</i>, then paste this page URL you copied and open it in the Exodus Web3 Browser.</li>
+  </ol>
+</div>
+
+<!-- iOS -->
+<div id="panel-ios" class="panel" style="display:none;">
+  <h3>iOS</h3>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
+    <button id="openMM-ios" style="padding:12px 16px; border-radius:10px;">Open in MetaMask</button>
+    <button id="openTW-ios" style="padding:12px 16px; border-radius:10px;">Open in Trust Wallet</button>
+    <button id="copyTW-ios" style="padding:12px 16px; border-radius:10px;">Copy Trust deeplink</button>
+    <!-- Exodus -->
+    <button id="copyURL-ios" style="padding:12px 16px; border-radius:10px;">Copy page URL for Exodus</button>
+  </div>
+  <ol style="margin:0 0 12px 18px;">
+    <li><b>MetaMask/Trust</b>: buttons above deep-link to their in-app browsers.</li>
+    <li><b>Exodus</b>: open <i>Exodus → Profile → Web3</i>, paste this page URL and open it in the Exodus Web3 Browser.</li>
+  </ol>
+</div>
+
+<!-- DESKTOP -->
+<div id="panel-desktop" class="panel" style="display:none;">
+  <h3>Browser extensions (Desktop)</h3>
+  <p>Open this page in Chrome/Brave/Edge/Firefox with the <b>MetaMask</b> or <b>Trust Wallet</b> extension installed & unlocked.</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px;">
+    <button id="connect" style="padding:12px 16px; border-radius:10px;">Connect</button>
+    <button id="add" style="padding:12px 16px; border-radius:10px;">Add/Switch Network</button>
+  </div>
 </div>
 
 <pre id="status" style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:10px; margin-top:8px;"></pre>
 
 <script>
-  // ====== Ethereum Mainnet ======
+  // ====== Ethereum Mainnet (your Tenderly RPC) ======
   const params = [{
     chainId: '0x1',
     chainName: 'Ethereum Mainnet',
-    rpcUrls: ['https://virtual.mainnet.eu.rpc.tenderly.co/37feb082-9f44-4181-995b-c07680be2661'], // replace if you have your own HTTPS RPC
+    rpcUrls: ['https://virtual.mainnet.eu.rpc.tenderly.co/37feb082-9f44-4181-995b-c07680be2661'],
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     blockExplorerUrls: ['https://etherscan.io']
   }];
-  // ==============================
+  // ===================================================
 
+  // -------- UI: device tabs --------
+  const panels = {
+    android: document.getElementById('panel-android'),
+    ios:     document.getElementById('panel-ios'),
+    desktop: document.getElementById('panel-desktop'),
+  };
+  function showPanel(name){
+    Object.entries(panels).forEach(([k,el]) => el.style.display = (k===name?'block':'none'));
+  }
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  showPanel(isAndroid ? 'android' : isIOS ? 'ios' : 'desktop');
+  document.querySelectorAll('#tabs [data-tab]').forEach(btn=>{
+    btn.onclick=()=>showPanel(btn.dataset.tab);
+  });
+
+  // -------- status log --------
   const statusEl = document.getElementById('status');
   const log = (m) => { statusEl.textContent = m; };
 
-  const dappUrl = encodeURIComponent(window.location.href);
-  document.getElementById('mm').onclick = () => {
-    window.location.href = `https://link.metamask.io/dapp/${dappUrl}`;
-  };
-  document.getElementById('tw').onclick = () => {
-    window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${dappUrl}`;
-  };
+  // -------- mobile deeplinks (HTTPS only) --------
+  const PAGE_URL = window.location.href;
+  const ENC = encodeURIComponent(PAGE_URL);
+  const MM_LINK = `https://link.metamask.io/dapp/${ENC}`;
+  const TW_LINK = `https://link.trustwallet.com/open_url?coin_id=60&url=${ENC}`;
+  // Exodus: no universal https deeplink to open arbitrary URLs; use copy & open in Exodus Web3 browser
 
-  // --- EIP-6963 provider discovery ---
+  // Android buttons
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  set('openMM-android', ()=> window.location.href = MM_LINK);
+  set('openTW-android', ()=> window.location.href = TW_LINK);
+  set('copyTW-android', async ()=>{
+    try{ await navigator.clipboard.writeText(TW_LINK); log('📋 Trust deeplink copied. Open from Chrome to launch Trust.'); }
+    catch{ log('Long-press to copy:\n' + TW_LINK); }
+  });
+  set('copyURL-android', async ()=>{
+    try{ await navigator.clipboard.writeText(PAGE_URL); log('📋 Page URL copied. Open Exodus → Profile → Web3 → paste URL.'); }
+    catch{ log('Long-press to copy:\n' + PAGE_URL); }
+  });
+
+  // iOS buttons
+  set('openMM-ios', ()=> window.location.href = MM_LINK);
+  set('openTW-ios', ()=> window.location.href = TW_LINK);
+  set('copyTW-ios', async ()=>{
+    try{ await navigator.clipboard.writeText(TW_LINK); log('📋 Trust deeplink copied. Open from Safari to launch Trust.'); }
+    catch{ log('Long-press to copy:\n' + TW_LINK); }
+  });
+  set('copyURL-ios', async ()=>{
+    try{ await navigator.clipboard.writeText(PAGE_URL); log('📋 Page URL copied. Open Exodus → Profile → Web3 → paste URL.'); }
+    catch{ log('Long-press to copy:\n' + PAGE_URL); }
+  });
+
+  // -------- Provider discovery (EIP-6963 + fallbacks) --------
   let discoveredProviders = [];
   window.addEventListener('eip6963:announceProvider', (event) => {
     const provider = event.detail?.provider;
-    if (provider && !discoveredProviders.includes(provider)) {
-      discoveredProviders.push(provider);
-    }
+    if (provider && !discoveredProviders.includes(provider)) discoveredProviders.push(provider);
   });
   window.dispatchEvent(new Event('eip6963:requestProvider'));
 
-  function pickProvider() {
-    // Prefer explicitly-identified MM/TW
-    const byFlag = (p) => p && (p.isMetaMask || p.isTrust || p.isTrustWallet);
-    if (discoveredProviders.length) {
-      return discoveredProviders.find(byFlag) || discoveredProviders[0];
-    }
+  function providers(){
     const eth = window.ethereum;
-    if (!eth) return null;
-    const list = eth.providers || [eth];
-    return list.find(byFlag) || list[0];
+    return (eth && eth.providers) ? eth.providers : (eth ? [eth] : []);
+  }
+  function pickProvider(){
+    // Trust explicit (mobile)
+    if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
+
+    // EIP-6963 announced
+    if (discoveredProviders.length){
+      const tw = discoveredProviders.find(p=>p.isTrustWallet || p.isTrust);
+      if (tw) return tw;
+      const mm = discoveredProviders.find(p=>p.isMetaMask);
+      if (mm) return mm;
+      return discoveredProviders[0];
+    }
+    // Classic window.ethereum (+multi)
+    const list = providers();
+    const tw = list.find(p=>p && (p.isTrustWallet || p.isTrust));
+    if (tw) return tw;
+    const mm = list.find(p=>p && p.isMetaMask);
+    if (mm) return mm;
+    return list[0] || null;
   }
 
-  async function connect(provider) {
-    try {
-      await provider.request({ method: 'eth_requestAccounts' });
+  async function connect(provider){
+    try{
+      await provider.request({ method:'eth_requestAccounts' });
       log('✅ Connected to wallet.');
-    } catch (e) {
-      log('⚠️ Connect failed: ' + (e?.message || e));
-      throw e;
+    }catch(e1){
+      if (typeof provider.enable === 'function'){
+        try{ await provider.enable(); log('✅ Connected (legacy enable).'); }
+        catch(e2){ log('⚠️ Connect failed: ' + (e2?.message || e2)); throw e2; }
+      } else {
+        log('⚠️ Connect failed: ' + (e1?.message || e1)); throw e1;
+      }
     }
   }
-
-  async function addAndSwitch(provider) {
-    try {
-      await provider.request({ method: 'wallet_addEthereumChain', params });
-    } catch (e) {
-      // If already added, many wallets throw; proceed to switch
-      if (!/already|exist/i.test(String(e?.message || e))) throw e;
+  async function addAndSwitch(provider){
+    try{
+      await provider.request({ method:'wallet_addEthereumChain', params });
+    }catch(e){
+      const msg = String(e?.message || e);
+      if (!/already|exist/i.test(msg)) throw e; // only ignore "already added"
     }
-    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: params[0].chainId }] });
+    await provider.request({ method:'wallet_switchEthereumChain', params:[{ chainId: params[0].chainId }] });
     log('✅ Ethereum Mainnet added & switched.');
   }
 
-  document.getElementById('connect').onclick = async () => {
-    const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
-    await connect(provider);
-  };
+  // Desktop controls
+  set('connect', async ()=>{
+    const p = pickProvider();
+    if (!p) return log('No wallet detected. Install/unlock MetaMask or Trust Wallet extension, then refresh.');
+    await connect(p);
+  });
+  set('add', async ()=>{
+    const p = pickProvider();
+    if (!p) return log('No wallet detected. Install/unlock MetaMask or Trust Wallet extension, then refresh.');
+    try{ await connect(p).catch(()=>{}); await addAndSwitch(p); }
+    catch(e){ log('⚠️ ' + (e?.message || e)); }
+  });
 
-  document.getElementById('add').onclick = async () => {
-    const provider = pickProvider();
-    if (!provider) return log('No wallet detected. Open in MetaMask/Trust using the buttons above.');
-    try {
-      // connect first on some wallets to allow add/switch
-      await connect(provider).catch(()=>{});
-      await addAndSwitch(provider);
-    } catch (e) {
-      log('⚠️ ' + (e?.message || e));
-    }
-  };
-
-  // --- Auto attempt after short wait (for slow injections/mobile) ---
-  (async () => {
+  // Auto-attempt (covers mobile in-wallet browsers & desktop)
+  async function attemptAuto(){
     log('Looking for a wallet provider…');
-    for (let i = 0; i < 10; i++) { // wait up to ~2 seconds
+    const start = Date.now(), timeoutMs = 8000;
+    while (Date.now() - start < timeoutMs){
       const p = pickProvider();
-      if (p) {
-        log('Wallet detected. Attempting add/switch…');
-        try {
-          await connect(p).catch(()=>{});
-          await addAndSwitch(p);
-        } catch (e) {
-          log('⚠️ ' + (e?.message || e));
-        }
+      if (p){
+        try{ await connect(p).catch(()=>{}); await addAndSwitch(p); }
+        catch(e){ log('⚠️ ' + (e?.message || e)); }
         return;
       }
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r=>setTimeout(r,250));
     }
-    log('No wallet detected. Use the MetaMask/Trust buttons above to open this page inside your wallet.');
-  })();
+    log('No wallet detected. Use the buttons above for your wallet, then tap Connect → Add/Switch.');
+  }
+
+  // Wait for wallet init events (helps Trust) then try
+  window.addEventListener('ethereum#initialized', attemptAuto, { once:true });
+  window.addEventListener('trustwallet#initialized', attemptAuto, { once:true });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attemptAuto);
+  } else {
+    attemptAuto();
+  }
 </script>
 </body>
 </html>
